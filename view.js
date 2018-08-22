@@ -91,15 +91,17 @@ function clearLastProblem() {
     saveData();
 }
 
-bot.onText(/^\/send/, (message) => {
+function onSend(message) {
     if (private.whitelist.includes(message.from.username)) {
-        const index = parseInt(message.text.match(/^\/send\s*(\d+)/)[1])-1;
-        if (index < problemIndexMinimum-1 || index > problemIndexMaximum-1) return;
+        const index = parseInt(message.text.match(/^\/send\s*(\d+)/)[1]) - 1;
+        if (index < problemIndexMinimum - 1 || index > problemIndexMaximum - 1) return;
         data.lastProblem = index;
         data.right_answers = [];
         saveData();
         if (!problems[index].special) {
-            bot.sendMessage(message.chat.id, createProblem(problems[index]), { parse_mode: 'HTML' }).then(async function () {
+            bot.sendMessage(message.chat.id, createProblem(problems[index]), {
+                parse_mode: 'HTML'
+            }).then(async function () {
                 for (let imageName of problems[index].images) {
                     await bot.sendPhoto(message.chat.id, "./Photos/" + imageName);
                 }
@@ -110,42 +112,64 @@ bot.onText(/^\/send/, (message) => {
     } else {
         bot.sendMessage(message.chat.id, `Sorry dear ${message.from.first_name} you are not allowed to use this command, if you are active and think that can controll this process, then contact @KoStard`);
     }
+}
+
+bot.onText(/^\/send/, (message) => {
+    onSend(message);
 });
 
-bot.onText(/^\/score/, (message) => {
+function sendScore(message) {
     let score = 0;
     if (users[message.from.id]) {
         score = users[message.from.id].score;
     } else {
         registerUser(message.from);
     }
-    bot.sendMessage(message.chat.id, `The score of ${message.from.first_name} is <b>${score}</b>`, { parse_mode: "HTML" });
+    bot.sendMessage(message.chat.id, `The score of ${message.from.first_name} is <b>${score}</b>`, {
+        parse_mode: "HTML"
+    });
+}
+
+bot.onText(/^\/score/, (message) => {
+    sendScore(message);
 });
 
-bot.onText(/^\/answer/, (message) => {
+function onAnswer(message) {
     if (private.whitelist.includes(message.from.username)) {
         const index = parseInt(message.text.match(/^\/answer\s*(\d+)/)[1]) - 1;
-        if (index < problemIndexMinimum-1 || index > problemIndexMaximum-1) return;
-        bot.sendMessage(message.chat.id, createAnswer(problems[index]), { parse_mode: 'HTML' }).then(() => {
+        if (index < problemIndexMinimum - 1 || index > problemIndexMaximum - 1) return;
+        bot.sendMessage(message.chat.id, createAnswer(problems[index]), {
+            parse_mode: 'HTML'
+        }).then(() => {
             if (index == data.lastProblem) {
-                bot.sendMessage(message.chat.id, createAnswersLeaderboard(), { parse_mode: 'HTML' });
+                bot.sendMessage(message.chat.id, createAnswersLeaderboard(), {
+                    parse_mode: 'HTML'
+                });
                 clearLastProblem();
             }
         });
     } else {
         bot.sendMessage(message.chat.id, `Sorry dear ${message.from.first_name} you are not allowed to use this command, if you are active and think that can controll this process, then contact @KoStard`);
     }
+}
+
+bot.onText(/^\/answer/, (message) => {
+    onAnswer(message);
 });
 
-bot.on('new_chat_members', (message) => {
+function onNewChatMember(message) {
     for (let new_chat_member of message.new_chat_members) {
         if (!users[new_chat_member.id]) {
             registerUser(new_chat_member, message.date);
         }
     }
+}
+
+bot.on('new_chat_members', (message) => {
+    onNewChatMember(message);
 });
 
-bot.on('message', (message) => {
+function processMessage(message) {
     if (!message.text) return;
     let text = message.text.replace(/(?:^\s+|\s+$|\s{2;})/, "");
     if (text[0] == '/')
@@ -161,7 +185,7 @@ bot.on('message', (message) => {
             }
             if (variant == problems[data.lastProblem].right_choice) {
                 addRightAnswer(message.from);
-                console.log("Right answer from "+message.from.first_name);
+                console.log("Right answer from " + message.from.first_name);
             } else {
                 console.log("Wrong answer from " + message.from.first_name);
             }
@@ -169,6 +193,32 @@ bot.on('message', (message) => {
                 data.lastAnswerers = [];
             }
             data.lastAnswerers.push(message.from.id);
+            saveData();
         }
     }
+}
+
+bot.on('message', (message) => {
+    processMessage(message);
 });
+
+
+bot.getUpdates().then((updates) => {
+    console.log(updates);
+    for (let update of updates) {
+        let message = update.message;
+        if (message) {
+            let text = message.text;
+            if (text.match(/^\/score/)) {
+                sendScore(message);
+            } else if (text.match(/^\/answer/)) {
+                onAnswer(message);
+            } else if (text.match(/^\/send/)) {
+                onSend(message);
+            } else if (message.new_chat_members) {
+                onNewChatMember(message);
+            } else 
+                processMessage(message);
+        }
+    }
+})
