@@ -22,7 +22,7 @@ const problemIndexMaximum = 500;
 
 function createProblem(problem) {
     let title = `<b>#Problem N${problem.index}</b>`;
-    let sub = `From chapter: #${problem.chapter}`;
+    let sub = `From chapter: #${problem.chapter.replace(/\s+/, "_")}`;
     let content = problem.problem;
     let variants = problem.variants.join('\n');
     return `${title}
