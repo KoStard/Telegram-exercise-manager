@@ -87,6 +87,7 @@ function addRightAnswer(user) {
 function clearLastProblem() {
     data.lastProblem = undefined;
     data.right_answers = [];
+    data.lastAnswerers = [];
     saveData();
 }
 
@@ -154,9 +155,16 @@ bot.on('message', (message) => {
         }
         const variant = text.toLowerCase();
         if (data.lastProblem != undefined) {
+            if (data.lastAnswerers && data.lastAnswerers.includes(message.from.id)) {
+                return;
+            }
             if (variant == problems[data.lastProblem].right_choice) {
                 addRightAnswer(message.from);
             }
+            if (!data.lastAnswerers) {
+                data.lastAnswerers = [];
+            }
+            data.lastAnswerers.push(message.from.id);
         }
     }
 });
