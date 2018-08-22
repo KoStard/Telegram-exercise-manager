@@ -161,6 +161,9 @@ bot.on('message', (message) => {
             }
             if (variant == problems[data.lastProblem].right_choice) {
                 addRightAnswer(message.from);
+                console.log("Right answer from "+message.from.first_name);
+            } else {
+                console.log("Wrong answer from " + message.from.first_name);
             }
             if (!data.lastAnswerers) {
                 data.lastAnswerers = [];
