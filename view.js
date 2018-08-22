@@ -146,6 +146,7 @@ bot.on('new_chat_members', (message) => {
 });
 
 bot.on('message', (message) => {
+    if (!message.text) return;
     let text = message.text.replace(/(?:^\s+|\s+$|\s{2;})/, "");
     if (text[0] == '/')
         return;
