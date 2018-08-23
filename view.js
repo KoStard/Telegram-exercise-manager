@@ -205,6 +205,8 @@ async function onScore(message) {
 
 async function onVariant(message) {
     let text = message.text;
+    if (text.length == 2)
+        text = text[1];
     const variant = text.toLowerCase();
     log(message.from, `Variant -- ${variant}`);
     if (data.lastProblem != undefined) {
