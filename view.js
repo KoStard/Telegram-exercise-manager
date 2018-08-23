@@ -272,25 +272,3 @@ async function tick() {
     }
     saveData();
 }
-
-
-// bot.getUpdates().then((updates) => {
-//     console.log(updates);
-//     for (let update of updates) {
-//         let message = update.message;
-//         if (message) {
-//             let text = message.text;
-//             console.log(text);
-//             if (text && text.match(/^\/score/)) {
-//                 sendScore(message);
-//             } else if (text && text.match(/^\/answer/)) {
-//                 onAnswer(message);
-//             } else if (text && text.match(/^\/send/)) {
-//                 onSend(message);
-//             } else if (message.new_chat_members) {
-//                 onNewChatMember(message);
-//             } else
-//                 processMessage(message);
-//         }
-//     }
-// });
