@@ -1,5 +1,4 @@
 /* jshint esversion: 6 */
-
 const TelegramBot = require('node-telegram-bot-api');
 const fs = require('fs');
 let private;
@@ -10,10 +9,11 @@ if (fs.existsSync('./private.json')) {
     fs.mkdirSync("private.json");
 }
 
+const bot = new TelegramBot(private.bot, {polling: false});
+
 const problems = JSON.parse(fs.readFileSync('./Problems.json').toString()).problems;
 let users = JSON.parse(fs.readFileSync('./users.json').toString());
 
-const bot = new TelegramBot(private.bot, { polling: true });
 let data = JSON.parse(fs.readFileSync("./data.json").toString());
 const standardPoints = 50;
 
@@ -35,6 +35,10 @@ function createAnswer(problem) {
     return `<b>The right choice is ${problem.right_choice.toUpperCase()}</b>
 ${problem.answer}
 #Answer to ${problem.index}`;
+}
+
+function log(user, text) {
+    console.log(`>>> ${user.first_name}(${Object.keys(users).filter(x=>x==user.id)?users[user.id].score:0}) > ${text}`);
 }
 
 function createAnswersLeaderboard() {
@@ -69,7 +73,7 @@ function saveData() {
 
 function addRightAnswer(user) {
     if (data.right_answers) {
-        for (right_answerer of data.right_answers) {
+        for (let right_answerer of data.right_answers) {
             if (right_answerer[0] == user.id) {
                 return;
             }
@@ -91,15 +95,55 @@ function clearLastProblem() {
     saveData();
 }
 
-function onSend(message) {
+function checkGroupRegistration(message) {
+    return message.chat && data.registered_groups.includes(message.chat.id);
+}
+
+function registerGroup(message) {
+    data.registered_groups.push(message.chat.id);
+    saveData();
+    log(message.from, `Registered ${message.chat.title} - ${message.chat.id} by ${message.from.username}`);
+}
+
+async function onStart(message) {
+    if (!checkGroupRegistration(message)) {
+        if (private.superadmins.includes(message.from.username)) {
+            registerGroup(message);
+            if (checkIfFromAdmin(message)) {
+                ticking = true;
+            }
+        } else {
+            await bot.sendMessage(message.chat.id, "This bot is created by @KoStard and if you want to register your group and access it's facilities, then contact @KoStard or join https://t.me/Pathology_Group, where you can find multiple problems with this bot.")
+            log(message.from, "Unauthorized call in " + message.chat.title);
+            console.log(message);
+        }
+    } else {
+        if (checkIfFromAdmin(message)) {
+            ticking = true;
+        }
+    }
+}
+
+async function checkIfFromAdmin(message) {
+    return !!(await bot.getChatAdministrators(message.chat.id)).filter(x => x.id == message.from.id);
+}
+
+async function onStop(message) {
+    if (checkIfFromAdmin(message)) {
+        ticking = false;
+    }
+}
+
+async function onSend(message) {
     if (private.whitelist.includes(message.from.username)) {
         const index = parseInt(message.text.match(/^\/send\s*(\d+)/)[1]) - 1;
         if (index < problemIndexMinimum - 1 || index > problemIndexMaximum - 1) return;
         data.lastProblem = index;
         data.right_answers = [];
+        data.lastAnswerers = [];
         saveData();
         if (!problems[index].special) {
-            bot.sendMessage(message.chat.id, createProblem(problems[index]), {
+            await bot.sendMessage(message.chat.id, createProblem(problems[index]), {
                 parse_mode: 'HTML'
             }).then(async function () {
                 for (let imageName of problems[index].images) {
@@ -110,52 +154,28 @@ function onSend(message) {
             console.log("Special problem");
         }
     } else {
-        bot.sendMessage(message.chat.id, `Sorry dear ${message.from.first_name} you are not allowed to use this command, if you are active and think that can controll this process, then contact @KoStard`);
+        await bot.sendMessage(message.chat.id, `Sorry dear ${message.from.first_name} you are not allowed to use this command, if you are active and think that can controll this process, then contact @KoStard`);
     }
 }
 
-bot.onText(/^\/send/, (message) => {
-    onSend(message);
-});
-
-function sendScore(message) {
-    let score = 0;
-    if (users[message.from.id]) {
-        score = users[message.from.id].score;
-    } else {
-        registerUser(message.from);
-    }
-    bot.sendMessage(message.chat.id, `The score of ${message.from.first_name} is <b>${score}</b>`, {
-        parse_mode: "HTML"
-    });
-}
-
-bot.onText(/^\/score/, (message) => {
-    sendScore(message);
-});
-
-function onAnswer(message) {
+async function onAnswer(message) {
     if (private.whitelist.includes(message.from.username)) {
         const index = parseInt(message.text.match(/^\/answer\s*(\d+)/)[1]) - 1;
         if (index < problemIndexMinimum - 1 || index > problemIndexMaximum - 1) return;
-        bot.sendMessage(message.chat.id, createAnswer(problems[index]), {
+        await bot.sendMessage(message.chat.id, createAnswer(problems[index]), {
             parse_mode: 'HTML'
-        }).then(() => {
+        }).then(async function () {
             if (index == data.lastProblem) {
-                bot.sendMessage(message.chat.id, createAnswersLeaderboard(), {
+                await bot.sendMessage(message.chat.id, createAnswersLeaderboard(), {
                     parse_mode: 'HTML'
                 });
                 clearLastProblem();
             }
         });
     } else {
-        bot.sendMessage(message.chat.id, `Sorry dear ${message.from.first_name} you are not allowed to use this command, if you are active and think that can controll this process, then contact @KoStard`);
+        await bot.sendMessage(message.chat.id, `Sorry dear ${message.from.first_name} you are not allowed to use this command, if you are active and think that can controll this process, then contact @KoStard`);
     }
 }
-
-bot.onText(/^\/answer/, (message) => {
-    onAnswer(message);
-});
 
 function onNewChatMember(message) {
     for (let new_chat_member of message.new_chat_members) {
@@ -165,60 +185,114 @@ function onNewChatMember(message) {
     }
 }
 
-bot.on('new_chat_members', (message) => {
-    onNewChatMember(message);
-});
+async function onScore(message) {
+    let score = 0;
+    if (users[message.from.id]) {
+        score = users[message.from.id].score;
+    } else {
+        registerUser(message.from);
+    }
+    await bot.sendMessage(message.chat.id, `The score of ${message.from.first_name} is <b>${score}</b>`, {
+        parse_mode: "HTML"
+    });
+}
 
-function processMessage(message) {
-    if (!message.text) return;
-    let text = message.text.replace(/(?:^\s+|\s+$|\s{2;})/, "");
-    if (text[0] == '/')
-        return;
-    if (text.length == 1) {
-        if (!users[message.from.id]) {
-            registerUser(message.from);
+async function onVariant(message) {
+    let text = message.text;
+    if (!users[message.from.id]) {
+        registerUser(message.from);
+    }
+    const variant = text.toLowerCase();
+    log(message.from, `Variant -- ${variant}`);
+    if (data.lastProblem != undefined) {
+        if (data.lastAnswerers && data.lastAnswerers.includes(message.from.id)) {
+            return;
         }
-        const variant = text.toLowerCase();
-        if (data.lastProblem != undefined) {
-            if (data.lastAnswerers && data.lastAnswerers.includes(message.from.id)) {
-                return;
-            }
-            if (variant == problems[data.lastProblem].right_choice) {
-                addRightAnswer(message.from);
-                console.log("Right answer from " + message.from.first_name);
-            } else {
-                console.log("Wrong answer from " + message.from.first_name);
-            }
-            if (!data.lastAnswerers) {
-                data.lastAnswerers = [];
-            }
-            data.lastAnswerers.push(message.from.id);
-            saveData();
+        if (variant == problems[data.lastProblem].right_choice) {
+            addRightAnswer(message.from);
+            console.log("Right answer from " + message.from.first_name);
+        } else {
+            console.log("Wrong answer from " + message.from.first_name);
         }
+        if (!data.lastAnswerers) {
+            data.lastAnswerers = [];
+        }
+        data.lastAnswerers.push(message.from.id);
+        saveData();
+    } else {
+        console.log("No last problem", data);
     }
 }
 
-bot.on('message', (message) => {
-    processMessage(message);
-});
+function processMessage(message) {
+    // console.log(`>>> ${message.from.first_name} -- ${message.text}`);
+    log(message.from, message.text);
+}
 
-
-bot.getUpdates().then((updates) => {
-    console.log(updates);
-    for (let update of updates) {
-        let message = update.message;
-        if (message) {
-            let text = message.text;
-            if (text.match(/^\/score/)) {
-                sendScore(message);
-            } else if (text.match(/^\/answer/)) {
-                onAnswer(message);
-            } else if (text.match(/^\/send/)) {
-                onSend(message);
-            } else if (message.new_chat_members) {
-                onNewChatMember(message);
-            } else 
-                processMessage(message);
+let regs = {
+    "^/start": onStart,
+    "^/stop": onStop,
+    "^/send": onSend,
+    "^/answer": onAnswer,
+    "^/score": onScore,
+    "^[a-zA-Z]$": onVariant,
+    "[\\s\\S]+": processMessage
+};
+let ticking = true;
+ticker();
+async function ticker() {
+    if (ticking) await tick();
+    setTimeout(ticker, 1000);
+}
+async function tick() {
+    resp = await fetch(`https://api.telegram.org/bot${private.tempBot}/getUpdates?offset=${data.offset}`)
+    if (resp.statusText == 'OK' && resp.status == 200) {
+        let b = await resp.json();
+        if (b.ok && b.result.length) {
+            console.log("Updating");
+            console.log(b);
+            for (let update of b.result) {
+                let message = update.message;
+                if (!checkGroupRegistration(message)) {
+                    onStart(message);
+                    continue;
+                }
+                data.offset = update.update_id+1; // Will increase the offset each time
+                if (message.text) {
+                    let text = message.text.replace(/(?:^\s+|\s+$|\s{2;})/, "");
+                    for (let r of Object.keys(regs)) {
+                        if (text.match(new RegExp(r))) {
+                            await regs[r](message);
+                            break;
+                        }
+                    }
+                } else if (message.new_chat_members) {
+                    onNewChatMember(message);
+                }
+            }
         }
     }
-})
+    saveData();
+}
+
+
+// bot.getUpdates().then((updates) => {
+//     console.log(updates);
+//     for (let update of updates) {
+//         let message = update.message;
+//         if (message) {
+//             let text = message.text;
+//             console.log(text);
+//             if (text && text.match(/^\/score/)) {
+//                 sendScore(message);
+//             } else if (text && text.match(/^\/answer/)) {
+//                 onAnswer(message);
+//             } else if (text && text.match(/^\/send/)) {
+//                 onSend(message);
+//             } else if (message.new_chat_members) {
+//                 onNewChatMember(message);
+//             } else
+//                 processMessage(message);
+//         }
+//     }
+// });
