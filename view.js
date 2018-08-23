@@ -67,6 +67,14 @@ function registerUser(user, date) {
     fs.writeFileSync('./users.json', JSON.stringify(users));
 }
 
+async function registerUserById(id) {
+    try {
+        registerUser(await bot.getChatMember(private.group, id));
+    } catch (err) {
+        console.error(err);
+    }
+}
+
 function saveData() {
     fs.writeFileSync('./data.json', JSON.stringify(data));
 }
@@ -224,12 +232,48 @@ function processMessage(message) {
     log(message.from, message.text);
 }
 
+function simulateAnswering(id, text) {
+    const variant = text.toLowerCase();
+    if (data.lastProblem != undefined) {
+        if (data.lastAnswerers && data.lastAnswerers.includes(id)) {
+            return;
+        }
+        if (variant == problems[data.lastProblem].right_choice) {
+            if (data.right_answers) {
+                for (let right_answerer of data.right_answers) {
+                    if (right_answerer[0] == id) {
+                        return;
+                    }
+                }
+            }
+            users[id].score += problems[data.lastProblem].points || standardPoints;
+            fs.writeFileSync('./users.json', JSON.stringify(users));
+            if (!data.right_answers) {
+                data.right_answers = [];
+            }
+            data.right_answers.push([id, users[id].first_name, users[id].score]);
+            saveData();
+            console.log("Right answer from " + users[id].first_name);
+        } else {
+            console.log("Wrong answer from " + users[id].first_name);
+        }
+        if (!data.lastAnswerers) {
+            data.lastAnswerers = [];
+        }
+        data.lastAnswerers.push(id);
+        saveData();
+    } else {
+        console.log("No last problem", data);
+    }
+}
+
 let regs = {
     "^/start": onStart,
     "^/stop": onStop,
     "^/send": onSend,
     "^/answer": onAnswer,
     "^/score": onScore,
+    "^/[a-zA-Z]$": onVariant,
     "^[a-zA-Z]$": onVariant,
     "[\\s\\S]+": processMessage
 };
