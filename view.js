@@ -38,7 +38,7 @@ ${problem.answer}
 }
 
 function log(user, text) {
-    console.log(`>>> ${user.first_name}(${Object.keys(users).filter(x=>x==user.id)?users[user.id].score:0}) > ${text}`);
+    console.log(`>>> ${user.first_name}(${Object.keys(users).filter(id=>id==user.id).length?users[user.id].score:0}) > ${text}`);
 }
 
 function createAnswersLeaderboard() {
@@ -189,8 +189,6 @@ async function onScore(message) {
     let score = 0;
     if (users[message.from.id]) {
         score = users[message.from.id].score;
-    } else {
-        registerUser(message.from);
     }
     await bot.sendMessage(message.chat.id, `The score of ${message.from.first_name} is <b>${score}</b>`, {
         parse_mode: "HTML"
@@ -199,9 +197,6 @@ async function onScore(message) {
 
 async function onVariant(message) {
     let text = message.text;
-    if (!users[message.from.id]) {
-        registerUser(message.from);
-    }
     const variant = text.toLowerCase();
     log(message.from, `Variant -- ${variant}`);
     if (data.lastProblem != undefined) {
@@ -245,7 +240,7 @@ async function ticker() {
     setTimeout(ticker, 1000);
 }
 async function tick() {
-    resp = await fetch(`https://api.telegram.org/bot${private.tempBot}/getUpdates?offset=${data.offset}`)
+    resp = await fetch(`https://api.telegram.org/bot${private.bot}/getUpdates?offset=${data.offset}`)
     if (resp.statusText == 'OK' && resp.status == 200) {
         let b = await resp.json();
         if (b.ok && b.result.length) {
@@ -260,6 +255,9 @@ async function tick() {
                 data.offset = update.update_id+1; // Will increase the offset each time
                 if (message.text) {
                     let text = message.text.replace(/(?:^\s+|\s+$|\s{2;})/, "");
+                    if (!users[message.from.id]) {
+                        registerUser(message.from);
+                    }
                     for (let r of Object.keys(regs)) {
                         if (text.match(new RegExp(r))) {
                             await regs[r](message);
