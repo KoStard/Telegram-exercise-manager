@@ -281,7 +281,7 @@ let ticking = true;
 ticker();
 async function ticker() {
     if (ticking) await tick();
-    setTimeout(ticker, 1000);
+    setTimeout(ticker, 700);
 }
 async function tick() {
     resp = await fetch(`https://api.telegram.org/bot${private.bot}/getUpdates?offset=${data.offset}`)
