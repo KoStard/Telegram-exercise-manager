@@ -42,7 +42,7 @@ function log(user, text) {
 }
 
 function createAnswersLeaderboard() {
-    let res = "";
+    let res = "Right answers:\n";
     for (let rightAnswererIndex in data.right_answers) {
         rightAnswererIndex = parseInt(rightAnswererIndex);
         if (rightAnswererIndex < 3) {
