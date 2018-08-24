@@ -294,6 +294,11 @@ async function tick() {
             console.log(b);
             for (let update of b.result) {
                 let message = update.message;
+                console.log(message);
+                if (!message) {
+                    data.offset = update.update_id + 1;
+                    continue;
+                }
                 if (!checkGroupRegistration(message)) {
                     onStart(message);
                     continue;
