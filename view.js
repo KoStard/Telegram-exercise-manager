@@ -79,21 +79,34 @@ function saveData() {
     fs.writeFileSync('./data.json', JSON.stringify(data));
 }
 
-function addRightAnswer(user) {
+function addRightAnswer(user, problemNumber) {
+    console.log("Here");
     if (data.right_answers) {
         for (let right_answerer of data.right_answers) {
             if (right_answerer[0] == user.id) {
+                console.log("interrupting");
                 return;
             }
         }
     }
+    console.log("Here");
     users[user.id].score += problems[data.lastProblem].points || standardPoints;
+    if (!users[user.id].right) users[user.id].right = [];
+    users[user.id].right.push(problemNumber);
+    console.log("Here");
+    console.log(users);
     fs.writeFileSync('./users.json', JSON.stringify(users));
     if (!data.right_answers) {
         data.right_answers = [];
     }
     data.right_answers.push([user.id, user.first_name, users[user.id].score]);
     saveData();
+}
+
+function addWrongAnswer(user) {
+    if (!users[user.id].wrong) users[user.id].wrong = [];
+    users[user.id].wrong.push(problemNumber);
+    fs.writeFileSync('./users.json', JSON.stringify(users));
 }
 
 function clearLastProblem() {
@@ -214,9 +227,10 @@ async function onVariant(message) {
             return;
         }
         if (variant == problems[data.lastProblem].right_choice) {
-            addRightAnswer(message.from);
+            addRightAnswer(message.from, data.lastProblem + 1);
             console.log("Right answer from " + message.from.first_name);
         } else {
+            addWrongAnswer(message.from, data.lastProblem + 1);
             console.log("Wrong answer from " + message.from.first_name);
         }
         if (!data.lastAnswerers) {
@@ -235,38 +249,13 @@ function processMessage(message) {
 }
 
 function simulateAnswering(id, text) {
-    const variant = text.toLowerCase();
-    if (data.lastProblem != undefined) {
-        if (data.lastAnswerers && data.lastAnswerers.includes(id)) {
-            return;
-        }
-        if (variant == problems[data.lastProblem].right_choice) {
-            if (data.right_answers) {
-                for (let right_answerer of data.right_answers) {
-                    if (right_answerer[0] == id) {
-                        return;
-                    }
-                }
-            }
-            users[id].score += problems[data.lastProblem].points || standardPoints;
-            fs.writeFileSync('./users.json', JSON.stringify(users));
-            if (!data.right_answers) {
-                data.right_answers = [];
-            }
-            data.right_answers.push([id, users[id].first_name, users[id].score]);
-            saveData();
-            console.log("Right answer from " + users[id].first_name);
-        } else {
-            console.log("Wrong answer from " + users[id].first_name);
-        }
-        if (!data.lastAnswerers) {
-            data.lastAnswerers = [];
-        }
-        data.lastAnswerers.push(id);
-        saveData();
-    } else {
-        console.log("No last problem", data);
-    }
+    onVariant({
+        from: {
+            first_name: users[id].first_name,
+            id: id,
+        },
+        text: text
+    });
 }
 
 let regs = {
