@@ -103,7 +103,7 @@ function addRightAnswer(user, problemNumber) {
     saveData();
 }
 
-function addWrongAnswer(user) {
+function addWrongAnswer(user, problemNumber) {
     if (!users[user.id].wrong) users[user.id].wrong = [];
     users[user.id].wrong.push(problemNumber);
     fs.writeFileSync('./users.json', JSON.stringify(users));
@@ -292,7 +292,6 @@ async function tick() {
                     onStart(message);
                     continue;
                 }
-                data.offset = update.update_id+1; // Will increase the offset each time
                 if (message.text) {
                     let text = message.text.replace(/(?:^\s+|\s+$|\s{2;})/, "");
                     if (!users[message.from.id]) {
@@ -307,6 +306,7 @@ async function tick() {
                 } else if (message.new_chat_members) {
                     onNewChatMember(message);
                 }
+                data.offset = update.update_id + 1; // Will increase the offset each time
             }
         }
     }
