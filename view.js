@@ -43,16 +43,27 @@ function log(user, text) {
     console.log(`>>> ${user.first_name}(${Object.keys(users).filter(id=>id==user.id).length?users[user.id].score:0}) > ${text}`);
 }
 
+function getPercentage(id) {
+    if (~Object.keys(users[id]).indexOf('wrong') && users[id].score >= 500) {
+        let wrong_answers_count = (new Set(users[id].wrong)).size;
+        return 1 - standardPoints * wrong_answers_count / users[id].score;
+    }
+}
+
 function createAnswersLeaderboard() {
     let res = "Right answers:\n";
     for (let rightAnswererIndex in data.right_answers) {
+        let perc = Math.round(1000*getPercentage(data.right_answers[rightAnswererIndex][0]))/10 || '';
+        if (perc) {
+            perc = ` #${perc}%`;
+        }
         rightAnswererIndex = parseInt(rightAnswererIndex);
         if (rightAnswererIndex < 3) {
-            res += `<b>${(rightAnswererIndex + 1)}: ${data.right_answers[rightAnswererIndex][1]} - ${data.right_answers[rightAnswererIndex][2]}</b>\n`;
+            res += `<b>${(rightAnswererIndex + 1)}: ${data.right_answers[rightAnswererIndex][1]} - ${data.right_answers[rightAnswererIndex][2]}${perc}</b>\n`;
         } else
-            res += `${(rightAnswererIndex + 1)}: ${data.right_answers[rightAnswererIndex][1]} - ${data.right_answers[rightAnswererIndex][2]}\n`;
+            res += `${(rightAnswererIndex + 1)}: ${data.right_answers[rightAnswererIndex][1]} - ${data.right_answers[rightAnswererIndex][2]}${perc}\n`;
     }
-    if (res == '') {
+    if (!data.right_answers) {
         res = 'No one gave the right answer.\n';
     }
     res += "#Problem_Leaderboard";
