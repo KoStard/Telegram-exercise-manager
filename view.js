@@ -9,9 +9,11 @@ if (fs.existsSync('./private.json')) {
     fs.mkdirSync("private.json");
 }
 
-const bot = new TelegramBot(private.bot, {polling: false});
+const bot = new TelegramBot(private.bot, {
+    polling: false
+});
 
-const problems = JSON.parse(fs.readFileSync('./Problems.json').toString()).problems;
+const problems = JSON.parse(fs.readFileSync('./new_problems.json').toString()).problems;
 let users = JSON.parse(fs.readFileSync('./users.json').toString());
 
 let data = JSON.parse(fs.readFileSync("./data.json").toString());
@@ -47,7 +49,7 @@ function createAnswersLeaderboard() {
         rightAnswererIndex = parseInt(rightAnswererIndex);
         if (rightAnswererIndex < 3) {
             res += `<b>${(rightAnswererIndex + 1)}: ${data.right_answers[rightAnswererIndex][1]} - ${data.right_answers[rightAnswererIndex][2]}</b>\n`;
-        }else
+        } else
             res += `${(rightAnswererIndex + 1)}: ${data.right_answers[rightAnswererIndex][1]} - ${data.right_answers[rightAnswererIndex][2]}\n`;
     }
     if (res == '') {
@@ -58,6 +60,7 @@ function createAnswersLeaderboard() {
 }
 
 function registerUser(user, date) {
+    console.log(user);
     users[user.id] = {
         first_name: user.first_name,
         username: user.username,
@@ -69,7 +72,7 @@ function registerUser(user, date) {
 
 async function registerUserById(id) {
     try {
-        registerUser(await bot.getChatMember(private.group, id));
+        registerUser((await bot.getChatMember(private.group, id)).user);
     } catch (err) {
         console.error(err);
     }
@@ -79,7 +82,7 @@ function saveData() {
     fs.writeFileSync('./data.json', JSON.stringify(data));
 }
 
-function addRightAnswer(user, problemNumber) {
+function addRightAnswer(user, problemNumber, withScore = true) {
     console.log("Here");
     if (data.right_answers) {
         for (let right_answerer of data.right_answers) {
@@ -89,13 +92,15 @@ function addRightAnswer(user, problemNumber) {
             }
         }
     }
-    console.log("Here");
-    users[user.id].score += problems[data.lastProblem].points || standardPoints;
-    if (!users[user.id].right) users[user.id].right = [];
-    users[user.id].right.push(problemNumber);
-    console.log("Here");
-    console.log(users);
-    fs.writeFileSync('./users.json', JSON.stringify(users));
+    if (withScore) {
+        console.log("Here");
+        users[user.id].score += problems[data.lastProblem].points || standardPoints;
+        if (!users[user.id].right) users[user.id].right = [];
+        users[user.id].right.push(problemNumber);
+        console.log("Here");
+        console.log(users);
+        fs.writeFileSync('./users.json', JSON.stringify(users));
+    }
     if (!data.right_answers) {
         data.right_answers = [];
     }
@@ -103,10 +108,12 @@ function addRightAnswer(user, problemNumber) {
     saveData();
 }
 
-function addWrongAnswer(user, problemNumber) {
-    if (!users[user.id].wrong) users[user.id].wrong = [];
-    users[user.id].wrong.push(problemNumber);
-    fs.writeFileSync('./users.json', JSON.stringify(users));
+function addWrongAnswer(user, problemNumber, withScore = true) {
+    if (withScore) {
+        if (!users[user.id].wrong) users[user.id].wrong = [];
+        users[user.id].wrong.push(problemNumber);
+        fs.writeFileSync('./users.json', JSON.stringify(users));
+    }
 }
 
 function clearLastProblem() {
@@ -183,16 +190,40 @@ async function onAnswer(message) {
     if (private.whitelist.includes(message.from.username)) {
         const index = parseInt(message.text.match(/^\/answer\s*(\d+)/)[1]) - 1;
         if (index < problemIndexMinimum - 1 || index > problemIndexMaximum - 1) return;
-        await bot.sendMessage(message.chat.id, createAnswer(problems[index]), {
-            parse_mode: 'HTML'
-        }).then(async function () {
+        answerText = createAnswer(problems[index]);
+        let MAX_LENGTH = 4096;
+        if (answerText.length <= MAX_LENGTH) {
+            await bot.sendMessage(message.chat.id, answerText, {
+                parse_mode: 'HTML'
+            }).then(async function () {
+                if (index == data.lastProblem) {
+                    await bot.sendMessage(message.chat.id, createAnswersLeaderboard(), {
+                        parse_mode: 'HTML'
+                    });
+                    clearLastProblem();
+                }
+            });
+        } else {
+            let answerSpl = answerText.split(". ");
+            let messages = [''];
+            for (let peace of answerSpl) {
+                messages[messages.length - 1] += peace + '. ';
+                if (messages[messages.length - 1].length > min(MAX_LENGTH, answerText.length / 2)) {
+                    messages.push('');
+                }
+            }
+            for (let messageBlock of messages) {
+                await bot.sendMessage(message.chat.id, messageBlock, {
+                    parse_mode: 'HTML'
+                });
+            }
             if (index == data.lastProblem) {
                 await bot.sendMessage(message.chat.id, createAnswersLeaderboard(), {
                     parse_mode: 'HTML'
                 });
                 clearLastProblem();
             }
-        });
+        }
     } else {
         await bot.sendMessage(message.chat.id, `Sorry dear ${message.from.first_name} you are not allowed to use this command, if you are active and think that can controll this process, then contact @KoStard`);
     }
@@ -227,10 +258,10 @@ async function onVariant(message) {
             return;
         }
         if (variant == problems[data.lastProblem].right_choice) {
-            addRightAnswer(message.from, data.lastProblem + 1);
-            console.log("Right answer from " + message.from.first_name);
+            addRightAnswer(message.from, data.lastProblem + 1, message.withScore);
+            console.log(`Right answer from ${message.from.first_name}: N${data.right_answers.length}`);
         } else {
-            addWrongAnswer(message.from, data.lastProblem + 1);
+            addWrongAnswer(message.from, data.lastProblem + 1, message.withScore);
             console.log("Wrong answer from " + message.from.first_name);
         }
         if (!data.lastAnswerers) {
@@ -248,14 +279,36 @@ function processMessage(message) {
     log(message.from, message.text);
 }
 
-function simulateAnswering(id, text) {
-    onVariant({
-        from: {
-            first_name: users[id].first_name,
-            id: id,
-        },
-        text: text
-    });
+function simulateAnswering(id, text, withScore = true) {
+    if (typeof (id) == "object") {
+        for (let currentId of id) {
+            let lastScore = users[currentId].score;
+            onVariant({
+                from: {
+                    first_name: users[currentId].first_name,
+                    id: currentId,
+                },
+                text: text,
+                withScore: withScore
+            });
+            if (!withScore) {
+                users[currentId].score = lastScore;
+            }
+        }
+    } else {
+        let lastScore = users[id].score;
+        onVariant({
+            from: {
+                first_name: users[id].first_name,
+                id: id,
+            },
+            text: text,
+            withScore: withScore
+        });
+        if (!withScore) {
+            users[id].score = lastScore;
+        }
+    }
 }
 
 let regs = {
@@ -290,6 +343,7 @@ async function tick() {
                 }
                 if (!checkGroupRegistration(message)) {
                     onStart(message);
+                    data.offset = update.update_id + 1;
                     continue;
                 }
                 if (message.text) {
